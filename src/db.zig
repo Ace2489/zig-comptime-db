@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StructField = std.builtin.Type.StructField;
+const Tree = @import("llrb").Tree;
 
 pub fn DBType(comptime config: anytype) type {
     const Tables = @typeInfo(@TypeOf(config.tables)).@"struct";
@@ -26,18 +27,27 @@ pub fn DBType(comptime config: anytype) type {
     return Schema;
 }
 
-fn crud_for_table(comptime table: anytype, TableId: anytype) type {
+fn crud_for_table(comptime Table: anytype, TableId: anytype) type {
     return struct {
         const Self = @This();
-        map: std.AutoArrayHashMapUnmanaged(TableId, table) = .empty,
+        store: Tree(u128, Table, compare_fn) = .empty,
+        last_id: u128 = 0,
 
-        pub fn get(self: *Self, id: TableId) ?table {
-            return self.map.get(id);
+        pub fn get(self: *Self, id: TableId) ?Table {
+            return self.store.search(@intFromEnum(id));
         }
 
-        pub fn create(self: *Self, gpa: Allocator, object: table) !TableId {
-            try self.map.put(gpa, TableId.unassigned, object);
-            return .unassigned;
+        pub fn create(self: *Self, gpa: Allocator, object: *Table) !TableId {
+            self.last_id += 1;
+            const id = self.last_id;
+            object.*.id = @enumFromInt(id);
+            const result = try self.store.getOrPut(gpa, .{ .key = id, .value = object.* });
+            result.update_value();
+            return object.*.id;
         }
     };
+}
+
+fn compare_fn(a: u128, b: u128) std.math.Order {
+    return std.math.order(a, b);
 }
