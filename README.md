@@ -1,2 +1,2 @@
 # Zoinks
-A comptime ORM in Zig
+An in-memory database whose schema is set at compile-time.
