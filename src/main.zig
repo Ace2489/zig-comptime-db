@@ -47,7 +47,7 @@ fn create_transfer(
 
     db.account.update(.{
         .id = credit_account,
-        .balance = dr.balance + amount,
+        .balance = cr.balance + amount,
     });
 
     return try db.transfer.create(gpa, .{
@@ -58,56 +58,67 @@ fn create_transfer(
 }
 pub fn main() !void {
     var gpa_instance: std.heap.DebugAllocator(.{}) = .{};
-    const gpa = gpa_instance.allocator();
-
-    // var random_instance = std.Random.DefaultPrng.init(92);
-    // const random = random_instance.random();
+    defer _ = gpa_instance.deinit();
+    const debug = gpa_instance.allocator();
+    var arena = std.heap.ArenaAllocator.init(debug);
+    defer arena.deinit();
+    const gpa = arena.allocator();
+    var random_instance = std.Random.DefaultPrng.init(92);
+    const random = random_instance.random();
     var db: DB = .{};
     // defer db.deinit(gpa);
 
-    var account: Account = .{ .id = .unassigned, .balance = 1234 };
-    var account2: Account = .{ .id = .unassigned, .balance = 5678 };
-    const id = try db.account.create(gpa, &account);
-    const id2 = try db.account.create(gpa, &account2);
-    std.debug.print("{}\n", .{id});
-    std.debug.print("{any}\n", .{db.account.get(id)});
-    std.debug.print("{any}\n", .{db.account.get(id2)});
+    // var account: Account = .{ .balance = 1234 };
+    // var account2: Account = .{ .balance = 5678 };
+    // const id = try db.account.create(gpa, &account);
+    // const id2 = try db.account.create(gpa, &account2);
+    // std.debug.print("{}\n", .{id});
+    // std.debug.print("{any}\n", .{db.account.get(id)});
+    // std.debug.print("{any}\n", .{db.account.get(id2)});
 
-    // const alice: Account.ID =
-    //     try db.account.create(gpa, .{ .balance = 100 });
+    const alice: Account.ID =
+        try db.account.create(gpa, .{ .balance = 100 });
 
-    // const fetched = db.account.get(alice);
+    // // inline for (0..3) |_| {
+    // //     _ = try db.account.create(gpa, .{ .balance = 100 });
+    // // }
+    // // const fetched = db.account.get(alice);
 
-    // std.debug.print("fetched: {any}", .{fetched});
-    // const bob: Account.ID =
-    //     try db.account.create(gpa, .{ .balance = 200 });
-    // const transfer =
-    //     try create_transfer(&db, gpa, alice, bob, 100);
-    // assert(transfer != null);
-    // var accounts: std.ArrayListUnmanaged(Account.ID) = .empty;
-    // defer accounts.deinit(gpa);
-    // const account_count = 100;
-    // try accounts.ensureTotalCapacity(gpa, account_count);
-    // accounts.appendAssumeCapacity(alice);
-    // accounts.appendAssumeCapacity(bob);
-    // while (accounts.items.len < account_count) {
-    //     const account =
-    //         try db.account.create(gpa, .{ .balance = 1000 });
-    //     accounts.appendAssumeCapacity(account);
-    // }
-    // const transfer_count = 100;
-    // for (0..transfer_count) |_| {
-    //     const debit = pareto_index(random, account_count);
-    //     const credit = pareto_index(random, account_count);
-    //     const amount = random.uintLessThan(u128, 10);
-    //     _ = try create_transfer(
-    //         &db,
-    //         gpa,
-    //         accounts.items[debit],
-    //         accounts.items[credit],
-    //         amount,
-    //     );
-    // }
+    const bob: Account.ID =
+        try db.account.create(gpa, .{ .balance = 200 });
+    const transfer =
+        try create_transfer(&db, gpa, alice, bob, 100);
+    assert(transfer != null);
+    var accounts: std.ArrayListUnmanaged(Account.ID) = .empty;
+    defer accounts.deinit(gpa);
+    const account_count = 100;
+    try accounts.ensureTotalCapacity(gpa, account_count);
+    accounts.appendAssumeCapacity(alice);
+    accounts.appendAssumeCapacity(bob);
+    while (accounts.items.len < account_count) {
+        const account =
+            try db.account.create(gpa, .{ .balance = 1000 });
+        accounts.appendAssumeCapacity(account);
+    }
+    const transfer_count = 100;
+    for (0..transfer_count) |_| {
+        const debit = pareto_index(random, account_count);
+        const credit = pareto_index(random, account_count);
+        const amount = random.uintLessThan(u128, 10);
+        _ = try create_transfer(
+            &db,
+            gpa,
+            accounts.items[debit],
+            accounts.items[credit],
+            amount,
+        );
+    }
+
+    for (0..db.account.store.nodes.items.len / 10) |i| {
+        std.debug.print("Account Details:{any}\n", .{db.account.get(@enumFromInt(i))});
+        std.debug.print("Transfer Details:{any}\n\n", .{db.transfer.get(@enumFromInt(i))});
+    }
+
     // var transfers_buffer: [10]Transfer = undefined;
     // const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer);
     // for (alice_transfers) |t| {

@@ -18,6 +18,7 @@ pub fn DBType(comptime config: anytype) type {
         struct_fields[i] = .{ .name = table_name, .type = CrudOps, .default_value_ptr = &crud, .is_comptime = false, .alignment = @alignOf(CrudOps) };
     }
 
+    // const decl = [1]std.builtin.Type.Declaration{.{ .name = "deinit" }};
     const Schema = @Type(.{ .@"struct" = .{
         .layout = .auto,
         .fields = &struct_fields,
@@ -37,16 +38,30 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype) type {
             return self.store.search(id);
         }
 
-        pub fn create(self: *Self, gpa: Allocator, object: *Table) !TableId {
+        pub fn create(self: *Self, gpa: Allocator, object: Table) !TableId {
             self.last_id += 1;
             const id = self.last_id;
-            object.*.id = @enumFromInt(id);
-            const result = try self.store.getOrPut(gpa, .{ .key = object.*.id, .value = object.* });
+            var obj = object;
+            obj.id = @enumFromInt(id);
+            const result = try self.store.getOrPut(gpa, .{ .key = obj.id, .value = obj });
             result.update_value();
-            return object.*.id;
+            return obj.id;
         }
-        fn compare_fn(a: TableId, b: TableId) std.math.Order {
+        pub fn compare_fn(a: TableId, b: TableId) std.math.Order {
             return std.math.order(@intFromEnum(a), @intFromEnum(b));
+        }
+
+        pub fn update(self: *Self, fields: anytype) void {
+            // const names = @typeInfo(@TypeOf(fields)).@"struct".fields;
+            if (!@hasField(@TypeOf(fields), "id")) {
+                std.debug.print("No id\n", .{});
+                return;
+            }
+            _ = self.store.update(.{ .key = fields.id, .value = fields });
+            return;
+        }
+        pub fn deinit(self: *Self, gpa: Allocator) void {
+            self.deinit(gpa);
         }
     };
 }
