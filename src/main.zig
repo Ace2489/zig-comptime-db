@@ -66,9 +66,12 @@ pub fn main() !void {
     // defer db.deinit(gpa);
 
     var account: Account = .{ .id = .unassigned, .balance = 1234 };
+    var account2: Account = .{ .id = .unassigned, .balance = 5678 };
     const id = try db.account.create(gpa, &account);
+    const id2 = try db.account.create(gpa, &account2);
     std.debug.print("{}\n", .{id});
     std.debug.print("{any}\n", .{db.account.get(id)});
+    std.debug.print("{any}\n", .{db.account.get(id2)});
 
     // const alice: Account.ID =
     //     try db.account.create(gpa, .{ .balance = 100 });

@@ -30,24 +30,23 @@ pub fn DBType(comptime config: anytype) type {
 fn crud_for_table(comptime Table: anytype, TableId: anytype) type {
     return struct {
         const Self = @This();
-        store: Tree(u128, Table, compare_fn) = .empty,
-        last_id: u128 = 0,
+        store: Tree(TableId, Table, compare_fn) = .empty,
+        last_id: u64 = 0,
 
         pub fn get(self: *Self, id: TableId) ?Table {
-            return self.store.search(@intFromEnum(id));
+            return self.store.search(id);
         }
 
         pub fn create(self: *Self, gpa: Allocator, object: *Table) !TableId {
             self.last_id += 1;
             const id = self.last_id;
             object.*.id = @enumFromInt(id);
-            const result = try self.store.getOrPut(gpa, .{ .key = id, .value = object.* });
+            const result = try self.store.getOrPut(gpa, .{ .key = object.*.id, .value = object.* });
             result.update_value();
             return object.*.id;
         }
+        fn compare_fn(a: TableId, b: TableId) std.math.Order {
+            return std.math.order(@intFromEnum(a), @intFromEnum(b));
+        }
     };
-}
-
-fn compare_fn(a: u128, b: u128) std.math.Order {
-    return std.math.order(a, b);
 }
