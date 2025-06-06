@@ -114,9 +114,10 @@ pub fn main() !void {
         );
     }
 
-    for (0..db.account.store.nodes.items.len / 10) |i| {
+    for (0..db.account.store.nodes.items.len / 90) |i| {
         std.debug.print("Account Details:{any}\n", .{db.account.get(@enumFromInt(i))});
         std.debug.print("Transfer Details:{any}\n\n", .{db.transfer.get(@enumFromInt(i))});
+        std.debug.print("Indexes Details:{any}\n\n", .{db.transfer.indexes});
     }
 
     // var transfers_buffer: [10]Transfer = undefined;
