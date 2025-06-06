@@ -79,11 +79,6 @@ pub fn main() !void {
     const alice: Account.ID =
         try db.account.create(gpa, .{ .balance = 100 });
 
-    // // inline for (0..3) |_| {
-    // //     _ = try db.account.create(gpa, .{ .balance = 100 });
-    // // }
-    // // const fetched = db.account.get(alice);
-
     const bob: Account.ID =
         try db.account.create(gpa, .{ .balance = 200 });
     const transfer =
@@ -91,7 +86,7 @@ pub fn main() !void {
     assert(transfer != null);
     var accounts: std.ArrayListUnmanaged(Account.ID) = .empty;
     defer accounts.deinit(gpa);
-    const account_count = 100;
+    const account_count = 10;
     try accounts.ensureTotalCapacity(gpa, account_count);
     accounts.appendAssumeCapacity(alice);
     accounts.appendAssumeCapacity(bob);
@@ -100,7 +95,7 @@ pub fn main() !void {
             try db.account.create(gpa, .{ .balance = 1000 });
         accounts.appendAssumeCapacity(account);
     }
-    const transfer_count = 100;
+    const transfer_count = 20;
     for (0..transfer_count) |_| {
         const debit = pareto_index(random, account_count);
         const credit = pareto_index(random, account_count);
@@ -114,12 +109,18 @@ pub fn main() !void {
         );
     }
 
-    for (0..db.account.store.nodes.items.len / 90) |i| {
-        std.debug.print("Account Details:{any}\n", .{db.account.get(@enumFromInt(i))});
-        std.debug.print("Transfer Details:{any}\n\n", .{db.transfer.get(@enumFromInt(i))});
-        std.debug.print("Indexes Details:{any}\n\n", .{db.transfer.indexes});
-    }
+    // for (1..db.account.store.nodes.items.len) |i| {
+    //     std.debug.print("Account Details:{any}\n", .{db.account.get(@enumFromInt(i))});
+    //     std.debug.print("Transfer Details:{any}\n\n", .{db.transfer.get(@enumFromInt(i))});
+    // }
 
+    const cred_index = &db.transfer.indexes.credit_account;
+    std.debug.print("Transfer tree length:{any}\n\n", .{db.transfer.store.kv_list.len});
+    std.debug.print("Credit Index length:{any}\n\n", .{db.transfer.indexes.credit_account.nodes.items.len});
+
+    for (cred_index.kv_list.items(.key)) |i| {
+        std.debug.print("Account Details:{any}\n", .{i});
+    }
     // var transfers_buffer: [10]Transfer = undefined;
     // const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer);
     // for (alice_transfers) |t| {

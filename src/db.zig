@@ -16,6 +16,7 @@ pub fn DBType(comptime config: anytype) type {
     for (Tables.fields, 0..) |field, i| {
         const table_name = field.name;
         const TableSchema = @field(config.tables, table_name);
+
         const TableId = @FieldType(TableSchema, "id");
 
         const IndexedFields = if (@hasField(@TypeOf(Indexes), table_name)) @field(Indexes, table_name) else .{};
@@ -63,8 +64,19 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
             const id = self.last_id;
             var obj = object;
             obj.id = @enumFromInt(id);
+
+            //todo: Make it more explicit that this will replace a value if it already exists
             const result = try self.store.getOrPut(gpa, .{ .key = obj.id, .value = obj });
+            assert(result.kv_index == 0xFFFFFFFF);
             result.update_value();
+
+            inline for (@typeInfo(Indexes).@"struct".fields) |f| {
+                assert(@hasField(Table, f.name));
+                var index_tree = &@field(self.indexes, f.name);
+                const res = try index_tree.getOrPut(gpa, .{ .key = .{ .field_value = @field(obj, f.name), .record_id = obj.id }, .value = {} });
+                res.update_value();
+            }
+
             return obj.id;
         }
         pub fn compare_fn(a: TableId, b: TableId) std.math.Order {
@@ -72,33 +84,44 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
         }
 
         pub fn update(self: *Self, fields: anytype) void {
-            // const names = @typeInfo(@TypeOf(fields)).@"struct".fields;
             if (!@hasField(@TypeOf(fields), "id")) {
-                std.debug.print("No id\n", .{});
+                std.debug.print("No id to update\n", .{});
                 return;
             }
 
-            _ = self.store.search(fields.id) orelse return;
-            _ = self.store.update(.{ .key = fields.id, .value = fields }) orelse return; //the update failed. no need to modify the index
+            _ = self.store.search(fields.id) orelse {
+                std.debug.print("No entity with the id:{} found in the table", .{fields.id});
+                return;
+            };
 
-            // const field_type = @typeInfo(@TypeOf(fields)).@"struct".fields;
-            // //field: id
-            // //field: balance
+            _ = self.store.update(.{ .key = fields.id, .value = fields }) orelse {
+                std.debug.print("Update failed", .{});
+                return;
+            }; //the update failed. no need to modify the index
 
-            // inline for (field_type) |f| {
-            //     const field_name = f.name;
-            //     if (std.mem.eql(u8, field_name, "id")) continue;
-            //     if (self.indexes.get(field_name)) |index| {
-            //         //This field has been modified. delete the entry in the index and re-insert it
-            //         const index_entry = .{ @field(fields, field_name), @field(fields, "id") };
-            //         index.delete(.{ @field(old, field_name), @field(fields, "id") });
-            //         index.put(index_entry);
-            //     }
+            // const UpdatedFields = @typeInfo(@TypeOf(fields)).@"struct".fields;
+            // // //field: id
+            // // //field: balance
+
+            // inline for (1..UpdatedFields.len) |i| {
+            //     // if (std.mem.eql(u8, f.name, "id")) continue;
+            //     const f = UpdatedFields[i];
+            //     if (!@hasField(Indexes, f.name)) continue;
+            //     const field_index_tree = @field(self.indexes, f.name);
+            //     const old_index_entry = .{ @field(old, f.name), fields.id };
+            //     field_index_tree.delete(old_index_entry);
+
+            //     std.debug.print("Old index entry: {}\n", .{old_index_entry});
+            //     const new_index_entry = .{ .key = .{ @field(fields, f.name), fields.id }, .value = void };
+
+            //     std.debug.print("New index entry: {}\n\n", .{new_index_entry});
+            //     field_index_tree.getOrPut(new_index_entry);
             // }
+
             return;
         }
         pub fn deinit(self: *Self, gpa: Allocator) void {
-            self.deinit(gpa);
+            self.store.deinit(gpa);
         }
     };
 }
@@ -106,29 +129,20 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
 fn generate_indexes(comptime Table: type, comptime IndexBlock: anytype) type {
     const index_info = @typeInfo(@TypeOf(IndexBlock)).@"struct";
     var fields: [index_info.fields.len]std.builtin.Type.StructField = undefined;
-    // var buffer: [100]u8 = undefined;
-    // @memset(&buffer, 0);
-    // _ = try std.fmt.bufPrint(&buffer, "Noooo: {}", .{fields.len});
-    // if (true) @compileError("Noooo " ++ buffer);
 
     for (index_info.fields, 0..) |_, i| {
         const field_name = @tagName(IndexBlock[i]);
-        // Validate field exists
         if (!@hasField(Table, field_name)) {
             @compileError("Table " ++ @typeName(Table) ++
                 " has no field '" ++ field_name ++ "'");
         }
 
-        // Get field type
         const FieldType = @FieldType(Table, field_name);
 
-        // Define composite key
         const KeyType = struct {
             field_value: FieldType,
             record_id: Table.ID,
         };
-
-        // Create comparison function
         const compare = struct {
             fn cmp(a: KeyType, b: KeyType) std.math.Order {
                 const val_cmp = compare_values(a.field_value, b.field_value);
@@ -137,7 +151,6 @@ fn generate_indexes(comptime Table: type, comptime IndexBlock: anytype) type {
             }
         }.cmp;
 
-        // Create tree type
         const IndexTree = Tree(KeyType, void, compare);
 
         fields[i] = .{
