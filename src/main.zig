@@ -95,7 +95,7 @@ pub fn main() !void {
             try db.account.create(gpa, .{ .balance = 1000 });
         accounts.appendAssumeCapacity(account);
     }
-    const transfer_count = 20;
+    const transfer_count = 10;
     for (0..transfer_count) |_| {
         const debit = pareto_index(random, account_count);
         const credit = pareto_index(random, account_count);
@@ -114,34 +114,35 @@ pub fn main() !void {
     //     std.debug.print("Transfer Details:{any}\n\n", .{db.transfer.get(@enumFromInt(i))});
     // }
 
-    const cred_index = &db.transfer.indexes.credit_account;
+    const cred_index = &db.transfer.store;
     std.debug.print("Transfer tree length:{any}\n\n", .{db.transfer.store.kv_list.len});
     std.debug.print("Credit Index length:{any}\n\n", .{db.transfer.indexes.credit_account.nodes.items.len});
 
-    for (cred_index.kv_list.items(.key)) |i| {
-        std.debug.print("Account Details:{any}\n", .{i});
+    for (cred_index.kv_list.items(.value)) |i| {
+        std.debug.print("Transfer Details:{any}\n", .{i});
     }
-    // var transfers_buffer: [10]Transfer = undefined;
-    // const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer);
-    // for (alice_transfers) |t| {
-    //     std.debug.print("alice: from={} to={} amount={}\n", .{
-    //         t.debit_account,
-    //         t.credit_account,
-    //         t.amount,
-    //     });
-    // }
-    // std.debug.print("\n\n", .{});
-    // const alice_to_bob_transfers = db.transfer.filter(
-    //     .{ .debit_account = alice, .credit_account = bob },
-    //     &transfers_buffer,
-    // );
-    // for (alice_to_bob_transfers) |t| {
-    //     std.debug.print("alice to bob: from={} to={} amount={}\n", .{
-    //         t.debit_account,
-    //         t.credit_account,
-    //         t.amount,
-    //     });
-    // }
+    var transfers_buffer: [10]Transfer = undefined;
+    const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer, transfers_buffer.len);
+    for (alice_transfers) |t| {
+        std.debug.print("\nalice: from={} to={} amount={}\n", .{
+            t.debit_account,
+            t.credit_account,
+            t.amount,
+        });
+    }
+    std.debug.print("\n\n", .{});
+    const alice_to_bob_transfers = db.transfer.filter(
+        .{ .debit_account = alice, .credit_account = bob },
+        &transfers_buffer,
+        transfers_buffer.len,
+    );
+    for (alice_to_bob_transfers) |t| {
+        std.debug.print("\nalice to bob: from={} to={} amount={}\n", .{
+            t.debit_account,
+            t.credit_account,
+            t.amount,
+        });
+    }
 }
 fn pareto_index(random: std.Random, count: usize) usize {
     assert(count > 0);

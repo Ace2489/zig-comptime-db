@@ -21,16 +21,6 @@ pub fn DBType(comptime config: anytype) type {
 
         const IndexedFields = if (@hasField(@TypeOf(Indexes), table_name)) @field(Indexes, table_name) else .{};
 
-        // const IndexFieldsInfo = @typeInfo(@TypeOf(IndexedFields)).@"struct";
-
-        // const indexed_fields = comptime blk: {
-        //     var names: [IndexFieldsInfo.fields.len][:0]const u8 = undefined;
-        //     for (IndexFieldsInfo.fields, 0..) |_, j| {
-        //         names[j] = @tagName(IndexedFields[j]);
-        //     }
-        //     break :blk names;
-        // };
-
         const CrudOps = crud_for_table(TableSchema, TableId, IndexedFields);
         const crud: CrudOps = .{};
 
@@ -83,6 +73,76 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
             return std.math.order(@intFromEnum(a), @intFromEnum(b));
         }
 
+        pub fn filter(self: *Self, query: anytype, buf: []Table, comptime buf_len: usize) []Table {
+            const Query = @TypeOf(query);
+
+            const query_fields = @typeInfo(Query).@"struct".fields;
+
+            comptime var indexed_field: ?[]const u8 = null;
+
+            comptime {
+                for (query_fields) |f| {
+                    if (!@hasField(Table, f.name)) @compileError("Table does not have field '" ++ f.name ++ "'");
+                    if (@hasField(Indexes, f.name) and indexed_field == null) {
+                        indexed_field = f.name;
+                    }
+                }
+            }
+
+            if (indexed_field) |index_field| {
+                const index = &@field(self.indexes, index_field);
+                const field_value = @field(query, index_field);
+                const Index = @FieldType(Indexes, index_field);
+                const IndexKey = @FieldType(Index.KV, "key");
+
+                const Id = @typeInfo(@FieldType(IndexKey, "record_id")).@"enum".tag_type;
+
+                const max_id: Id = std.math.maxInt(Id);
+
+                var buf_ids: [buf_len]IndexKey = undefined;
+
+                const initial = index.filter(.{ .field_value = field_value, .record_id = @enumFromInt(0) }, .{ .field_value = field_value, .record_id = @enumFromInt(max_id) }, &buf_ids);
+
+                var count: usize = 0;
+
+                for (0..initial) |i| {
+                    const record = self.store.search(buf_ids[i].record_id) orelse @panic("This shouldn't happen");
+
+                    const matches = blk: {
+                        inline for (query_fields) |f| {
+                            comptime if (std.mem.eql(u8, f.name, index_field)) continue;
+                            const field_filter = @field(query, f.name);
+                            if (compare_values(@field(record, f.name), field_filter) != .eq) break :blk false;
+                        }
+                        break :blk true;
+                    };
+
+                    if (matches and i < buf_len) {
+                        buf[i] = record;
+                        count += 1;
+                    }
+                }
+                return buf[0..count];
+            }
+            //No index field to filter with
+            const records = self.store.kv_list.items(.value);
+
+            var count: usize = 0;
+            for (records) |record| {
+                const matches = blk: {
+                    inline for (query_fields) |f| {
+                        const field_value = @field(query, f.name);
+                        if (compare_values(@field(record, f.name), field_value) != .eq) break :blk false;
+                    }
+                    break :blk true;
+                };
+                if (matches and count < buf.len) {
+                    buf[count] = record;
+                    count += 1;
+                }
+            }
+            return buf[0..count];
+        }
         pub fn update(self: *Self, fields: anytype) void {
             if (!@hasField(@TypeOf(fields), "id")) {
                 std.debug.print("No id to update\n", .{});
@@ -101,7 +161,7 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
 
             // const UpdatedFields = @typeInfo(@TypeOf(fields)).@"struct".fields;
             // // //field: id
-            // // //field: balance
+            // // //field:
 
             // inline for (1..UpdatedFields.len) |i| {
             //     // if (std.mem.eql(u8, f.name, "id")) continue;

@@ -9,8 +9,8 @@
 
     .dependencies = .{
         .llrb = .{
-            .url = "git+https://github.com/Ace2489/left-leaning-rb-tree-zig?ref=main#32f6b71d1238fa00da434999dfced9403d08c75d",
-            .hash = "llrb-0.0.0-tgZwOP3LAAAiRm1lXWp6lgxRmqjc3A9IMTJaQmNJ8T5y",
+            .url = "git+https://github.com/Ace2489/left-leaning-rb-tree-zig?ref=main#2b7465cd4d3c060b712d7742490d79b3fb1b6849",
+            .hash = "llrb-0.0.0-tgZwOFbaAAAoX5pf6vm5L1yCojqLCgrjSjIsprhL-tmi",
         },
     },
     .paths = .{
