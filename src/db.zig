@@ -149,7 +149,7 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
                 return;
             }
 
-            _ = self.store.search(fields.id) orelse {
+            const old = self.store.search(fields.id) orelse {
                 std.debug.print("No entity with the id:{} found in the table", .{fields.id});
                 return;
             };
@@ -159,24 +159,25 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
                 return;
             }; //the update failed. no need to modify the index
 
-            // const UpdatedFields = @typeInfo(@TypeOf(fields)).@"struct".fields;
-            // // //field: id
-            // // //field:
+            const UpdatedFields = @typeInfo(@TypeOf(fields)).@"struct".fields;
+            // //field: id
+            // //field:
 
-            // inline for (1..UpdatedFields.len) |i| {
-            //     // if (std.mem.eql(u8, f.name, "id")) continue;
-            //     const f = UpdatedFields[i];
-            //     if (!@hasField(Indexes, f.name)) continue;
-            //     const field_index_tree = @field(self.indexes, f.name);
-            //     const old_index_entry = .{ @field(old, f.name), fields.id };
-            //     field_index_tree.delete(old_index_entry);
+            inline for (1..UpdatedFields.len) |i| {
+                const f = UpdatedFields[i];
+                comptime if (std.mem.eql(u8, f.name, "id")) continue;
+                if (!@hasField(Indexes, f.name)) continue;
+                var field_index_tree = &@field(self.indexes, f.name);
+                const old_index_entry = .{ @field(old, f.name), fields.id };
+                field_index_tree.delete(old_index_entry);
 
-            //     std.debug.print("Old index entry: {}\n", .{old_index_entry});
-            //     const new_index_entry = .{ .key = .{ @field(fields, f.name), fields.id }, .value = void };
+                std.debug.print("Old index entry: {}\n", .{old_index_entry});
+                const new_index_entry = .{ .key = .{ .field_value = @field(fields, f.name), .record_id = fields.id }, .value = void };
 
-            //     std.debug.print("New index entry: {}\n\n", .{new_index_entry});
-            //     field_index_tree.getOrPut(new_index_entry);
-            // }
+                std.debug.print("New index entry: {}\n\n", .{new_index_entry});
+                const result = field_index_tree.getOrPut(new_index_entry);
+                result.update_value();
+            }
 
             return;
         }
