@@ -1,6 +1,8 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const DBType = @import("./db.zig").DBType;
+const Bundle = @import("./db.zig");
+const DBType = Bundle.DBType;
+
 const Account = struct {
     id: ID = .unassigned,
     balance: u128,
@@ -31,8 +33,7 @@ fn create_transfer(
     credit_account: Account.ID,
     amount: u128,
 ) !?Transfer.ID {
-    if (debit_account == credit_account)
-        return null;
+    assert(debit_account != credit_account);
 
     const dr = db.account.get(debit_account) orelse return null;
     const cr = db.account.get(credit_account) orelse return null;
@@ -59,22 +60,11 @@ fn create_transfer(
 pub fn main() !void {
     var gpa_instance: std.heap.DebugAllocator(.{}) = .{};
     defer _ = gpa_instance.deinit();
-    const debug = gpa_instance.allocator();
-    var arena = std.heap.ArenaAllocator.init(debug);
-    defer arena.deinit();
-    const gpa = arena.allocator();
+    const gpa = gpa_instance.allocator();
     var random_instance = std.Random.DefaultPrng.init(92);
     const random = random_instance.random();
     var db: DB = .{};
-    // defer db.deinit(gpa);
-
-    // var account: Account = .{ .balance = 1234 };
-    // var account2: Account = .{ .balance = 5678 };
-    // const id = try db.account.create(gpa, &account);
-    // const id2 = try db.account.create(gpa, &account2);
-    // std.debug.print("{}\n", .{id});
-    // std.debug.print("{any}\n", .{db.account.get(id)});
-    // std.debug.print("{any}\n", .{db.account.get(id2)});
+    defer Bundle.deinit(&db, gpa);
 
     const alice: Account.ID =
         try db.account.create(gpa, .{ .balance = 100 });
@@ -100,30 +90,24 @@ pub fn main() !void {
         const debit = pareto_index(random, account_count);
         const credit = pareto_index(random, account_count);
         const amount = random.uintLessThan(u128, 10);
+        const cr = accounts.items[credit];
+        const dr = accounts.items[debit];
+
+        if (cr == dr) continue;
+
         _ = try create_transfer(
             &db,
             gpa,
-            accounts.items[debit],
-            accounts.items[credit],
+            dr,
+            cr,
             amount,
         );
     }
 
-    // for (1..db.account.store.nodes.items.len) |i| {
-    //     std.debug.print("Account Details:{any}\n", .{db.account.get(@enumFromInt(i))});
-    //     std.debug.print("Transfer Details:{any}\n\n", .{db.transfer.get(@enumFromInt(i))});
-    // }
-
-    const cred_index = &db.transfer.store;
-    std.debug.print("Transfer tree length:{any}\n\n", .{db.transfer.store.kv_list.len});
-    std.debug.print("Credit Index length:{any}\n\n", .{db.transfer.indexes.credit_account.nodes.items.len});
-
-    for (cred_index.kv_list.items(.value)) |i| {
-        std.debug.print("Transfer Details:{any}\n", .{i});
-    }
+    std.debug.print("{}\n", .{db.transfer.last_id});
     var transfers_buffer: [10]Transfer = undefined;
     const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer, transfers_buffer.len);
-    for (alice_transfers) |t| {
+    for (alice_transfers.?) |t| {
         std.debug.print("\nalice: from={} to={} amount={}\n", .{
             t.debit_account,
             t.credit_account,
@@ -136,7 +120,7 @@ pub fn main() !void {
         &transfers_buffer,
         transfers_buffer.len,
     );
-    for (alice_to_bob_transfers) |t| {
+    for (alice_to_bob_transfers.?) |t| {
         std.debug.print("\nalice to bob: from={} to={} amount={}\n", .{
             t.debit_account,
             t.credit_account,

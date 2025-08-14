@@ -1,9 +1,9 @@
 .{
-    .name = .comptime_orm,
+    .name = .zigdb,
 
     .version = "0.0.0",
 
-    .fingerprint = 0x1eecb1e129622942, // Changing this has security and trust implications.
+    .fingerprint = 0xdcdbc488458015c7, // Changing this has security and trust implications.
 
     .minimum_zig_version = "0.14.0",
 
