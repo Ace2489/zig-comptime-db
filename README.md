@@ -172,7 +172,9 @@ Indexes are used internally for faster updates and filtering. You normally wonâ€
 
 Be careful not to corrupt data when accessing them directly.
 
-For example, each table (e.g. `account`) exposes its indexes under the `indexes` field:
+### Accessing Indexes
+
+Each table (e.g. `account`) exposes its indexes under the `indexes` field:
 
 ```zig
 var debit_account_index = &db.account.indexes.debit_account;
