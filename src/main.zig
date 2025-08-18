@@ -1,6 +1,6 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const Bundle = @import("./db.zig");
+const Bundle = @import("zigdb");
 const DBType = Bundle.DBType;
 
 const Account = struct {
@@ -23,6 +23,9 @@ const DB = DBType(.{
     .indexes = .{
         .transfer = .{
             .debit_account, .credit_account,
+        },
+        .account = .{
+            .balance,
         },
     },
 });
@@ -66,26 +69,31 @@ pub fn main() !void {
     var db: DB = .{};
     defer Bundle.deinit(&db, gpa);
 
-    const alice: Account.ID =
-        try db.account.create(gpa, .{ .balance = 100 });
+    const alice: Account.ID = try db.account.create(gpa, .{ .balance = 100 });
+    const bob: Account.ID = try db.account.create(gpa, .{ .balance = 100 });
 
-    const bob: Account.ID =
-        try db.account.create(gpa, .{ .balance = 200 });
-    const transfer =
-        try create_transfer(&db, gpa, alice, bob, 100);
+    const transfer = try create_transfer(&db, gpa, alice, bob, 100);
     assert(transfer != null);
+
     var accounts: std.ArrayListUnmanaged(Account.ID) = .empty;
     defer accounts.deinit(gpa);
     const account_count = 10;
+
     try accounts.ensureTotalCapacity(gpa, account_count);
     accounts.appendAssumeCapacity(alice);
     accounts.appendAssumeCapacity(bob);
+
     while (accounts.items.len < account_count) {
-        const account =
-            try db.account.create(gpa, .{ .balance = 1000 });
+        const account = try db.account.create(gpa, .{ .balance = 1000 });
         accounts.appendAssumeCapacity(account);
     }
+
+    for (db.account.slice()) |i| {
+        std.debug.print("{}\n", .{i});
+    }
+
     const transfer_count = 10;
+
     for (0..transfer_count) |_| {
         const debit = pareto_index(random, account_count);
         const credit = pareto_index(random, account_count);
@@ -104,29 +112,38 @@ pub fn main() !void {
         );
     }
 
-    std.debug.print("{}\n", .{db.transfer.last_id});
-    var transfers_buffer: [10]Transfer = undefined;
-    const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer, transfers_buffer.len);
-    for (alice_transfers.?) |t| {
-        std.debug.print("\nalice: from={} to={} amount={}\n", .{
-            t.debit_account,
-            t.credit_account,
-            t.amount,
-        });
+    std.debug.print("\n", .{});
+    for (db.account.slice()) |i| {
+        std.debug.print("{}\n", .{i});
     }
-    std.debug.print("\n\n", .{});
-    const alice_to_bob_transfers = db.transfer.filter(
-        .{ .debit_account = alice, .credit_account = bob },
-        &transfers_buffer,
-        transfers_buffer.len,
-    );
-    for (alice_to_bob_transfers.?) |t| {
-        std.debug.print("\nalice to bob: from={} to={} amount={}\n", .{
-            t.debit_account,
-            t.credit_account,
-            t.amount,
-        });
-    }
+
+    // std.debug.print("\n", .{});
+    // for (db.transfer.slice()) |i| {
+    //     std.debug.print("{}\n", .{i});
+    // }
+
+    // var transfers_buffer: [10]Transfer = undefined;
+    // const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer, transfers_buffer.len);
+    // for (alice_transfers.?) |t| {
+    //     std.debug.print("\nalice: from={} to={} amount={}\n", .{
+    //         t.debit_account,
+    //         t.credit_account,
+    //         t.amount,
+    //     });
+    // }
+    // std.debug.print("\n\n", .{});
+    // const alice_to_bob_transfers = db.transfer.filter(
+    //     .{ .debit_account = alice, .credit_account = bob },
+    //     &transfers_buffer,
+    //     transfers_buffer.len,
+    // );
+    // for (alice_to_bob_transfers.?) |t| {
+    //     std.debug.print("\nalice to bob: from={} to={} amount={}\n", .{
+    //         t.debit_account,
+    //         t.credit_account,
+    //         t.amount,
+    //     });
+    // }
 }
 fn pareto_index(random: std.Random, count: usize) usize {
     assert(count > 0);
