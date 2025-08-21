@@ -105,7 +105,7 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
             return std.math.order(@intFromEnum(a), @intFromEnum(b));
         }
 
-        pub fn filter(self: *Self, query: anytype, buf: []Table) ?[]Table {
+        pub fn filter(self: *Self, query: anytype, buf: []Table) []Table {
             const Query = @TypeOf(query);
             const query_fields = @typeInfo(Query).@"struct".fields;
 
@@ -157,20 +157,34 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
                 break :blk .{ index_iterators, non_indexed_fields[0..non_indexed_count].* };
             };
 
-            var count: usize = 0;
+            //No indexes, do a linear scan
+            if (index_iterators.len == 0) {
+                const items = self.slice();
+                var count: u32 = 0;
+                loop: for (items) |record| {
+                    if (count == buf.len) break;
+                    inline for (non_indexed_fields) |field| {
+                        if (@field(record, field) != @field(query, field)) continue :loop;
+                    }
+                    buf[count] = record;
+                    count += 1;
+                }
+                return buf[0..count];
+            }
 
+            var count: usize = 0;
             //Now the intersection between the different iterators
             //Thank you, Matklad. https://matklad.github.io/2025/03/19/comptime-zig-orm.html#Merge-Sort-Join
             loop: while (true) {
                 //Check if we've filled the output buffer
                 if (count == buf.len) break;
 
-                const pk = index_iterators[0].peek() orelse break;
+                const pk = index_iterators[0].peek() orelse break :loop;
                 var min = pk.record_id;
 
                 //Get the iterator with the lowest record_id
                 inline for (index_iterators) |iterator| {
-                    const peek = iterator.peek() orelse break;
+                    const peek = iterator.peek() orelse break :loop;
 
                     if (compare_values(peek.record_id, min) == .lt) {
                         min = peek.record_id;
@@ -199,20 +213,14 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
                     count += 1;
                 }
             }
-
-            if (buf.len == 0) return null else return buf[0..count];
+            return buf[0..count];
         }
 
-        pub fn update(self: *Self, fields: Table) void {
-            const old = self.store.get(fields.id) orelse {
-                std.debug.print("No entity with the id:{} found in the table", .{fields.id});
-                return;
-            };
+        pub fn update(self: *Self, fields: Table) error{EntryNotFound}!void {
+            const old = self.store.get(fields.id) orelse return error.EntryNotFound;
 
-            _ = self.store.update(.{ .key = fields.id, .value = fields }) catch {
-                std.debug.print("Update failed", .{});
-                return;
-            }; //the update failed. no need to modify the index
+            //This should never error because we just fetched the entry from the store above
+            _ = self.store.update(.{ .key = fields.id, .value = fields }) catch unreachable;
 
             const UpdatedFields = @typeInfo(@TypeOf(fields)).@"struct".fields;
 
@@ -251,7 +259,7 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
             const deleted = self.store.delete(id) orelse return null;
 
             inline for (@typeInfo(Indexes).@"struct".fields) |f| {
-                var index = @field(self.indexes, f.name);
+                var index = &@field(self.indexes, f.name);
                 const field_value = @field(deleted.value, f.name);
                 _ = index.delete(.{ .field_value = field_value, .record_id = deleted.key }) orelse std.debug.panic("No index entry for item in the tree: {}\n", .{deleted});
             }

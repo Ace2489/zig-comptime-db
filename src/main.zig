@@ -44,12 +44,12 @@ fn create_transfer(
     if (dr.balance < amount) return null;
     if (cr.balance > std.math.maxInt(u128) - amount) return null;
 
-    db.account.update(.{
+    try db.account.update(.{
         .id = debit_account,
         .balance = dr.balance - amount,
     });
 
-    db.account.update(.{
+    try db.account.update(.{
         .id = credit_account,
         .balance = cr.balance + amount,
     });
@@ -109,8 +109,8 @@ pub fn main() !void {
     }
 
     var transfers_buffer: [10]Transfer = undefined;
-    const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer);
-    for (alice_transfers.?) |t| {
+    const alice_transfers = db.transfer.filter(.{ .amount = 3 }, &transfers_buffer);
+    for (alice_transfers) |t| {
         std.debug.print("\nalice: from={} to={} amount={}\n", .{
             t.debit_account,
             t.credit_account,
@@ -118,12 +118,12 @@ pub fn main() !void {
         });
     }
 
-    std.debug.print("Deleted alice: {?}\n", .{db.transfer.delete(alice_transfers.?[0].id)});
+    std.debug.print("Deleted alice: {?}\n", .{db.transfer.delete(alice_transfers[0].id)});
     const alice_to_bob_transfers = db.transfer.filter(
         .{ .debit_account = alice, .credit_account = bob },
         &transfers_buffer,
     );
-    for (alice_to_bob_transfers.?) |t| {
+    for (alice_to_bob_transfers) |t| {
         std.debug.print("\nalice to bob: from={} to={} amount={}\n", .{
             t.debit_account,
             t.credit_account,
