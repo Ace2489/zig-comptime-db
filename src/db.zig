@@ -248,8 +248,14 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
             return self.store.values.items;
         }
         pub fn delete(self: *Self, id: TableId) ?Table {
-            _ = self;
-            _ = id;
+            const deleted = self.store.delete(id) orelse return null;
+
+            inline for (@typeInfo(Indexes).@"struct".fields) |f| {
+                var index = @field(self.indexes, f.name);
+                const field_value = @field(deleted.value, f.name);
+                _ = index.delete(.{ .field_value = field_value, .record_id = deleted.key }) orelse std.debug.panic("No index entry for item in the tree: {}\n", .{deleted});
+            }
+            return deleted.value;
         }
 
         pub fn deinit(self: *Self, gpa: Allocator) void {

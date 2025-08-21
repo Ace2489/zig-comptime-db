@@ -118,6 +118,7 @@ pub fn main() !void {
         });
     }
 
+    std.debug.print("Deleted alice: {?}\n", .{db.transfer.delete(alice_transfers.?[0].id)});
     const alice_to_bob_transfers = db.transfer.filter(
         .{ .debit_account = alice, .credit_account = bob },
         &transfers_buffer,
