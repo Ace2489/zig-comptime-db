@@ -105,82 +105,103 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
             return std.math.order(@intFromEnum(a), @intFromEnum(b));
         }
 
-        // pub fn filter(self: *Self, query: anytype, buf: []Table, comptime buf_len: usize) ?[]Table {
-        //     const Query = @TypeOf(query);
+        pub fn filter(self: *Self, query: anytype, buf: []Table) ?[]Table {
+            const Query = @TypeOf(query);
+            const query_fields = @typeInfo(Query).@"struct".fields;
 
-        //     const query_fields = @typeInfo(Query).@"struct".fields;
+            const index_iterators, const non_indexed_fields = blk: {
+                comptime var indexed_fields: [query_fields.len][]const u8 = undefined;
+                comptime var non_indexed_fields: [query_fields.len][]const u8 = undefined;
 
-        //     comptime var indexed_field: ?[]const u8 = null;
+                comptime var indexed_field_count = 0;
+                comptime var non_indexed_count = 0;
 
-        //     comptime {
-        //         for (query_fields) |f| {
-        //             if (!@hasField(Table, f.name)) @compileError("Table does not have field '" ++ f.name ++ "'");
-        //             if (@hasField(Indexes, f.name) and indexed_field == null) {
-        //                 indexed_field = f.name;
-        //             }
-        //         }
-        //     }
+                //Go through the query fields, and separate the indexed fields from the non-indexed fields in the query
+                inline for (query_fields) |f| {
+                    if (!@hasField(Table, f.name)) @compileError("Table does not have field '" ++ f.name ++ "'");
+                    if (@hasField(Indexes, f.name)) {
+                        indexed_fields[indexed_field_count] = f.name;
+                        indexed_field_count += 1;
+                    } else {
+                        non_indexed_fields[non_indexed_count] = f.name;
+                        non_indexed_count += 1;
+                    }
+                }
 
-        //     if (indexed_field) |index_field_name| {
-        //         const index = &@field(self.indexes, index_field_name);
-        //         const field_value = @field(query, index_field_name);
-        //         const Index = @FieldType(Indexes, index_field_name);
-        //         const IndexKey = @FieldType(Index.KV, "key");
+                //Generate a tuple which can store the different index iterators for this query
+                comptime var index_iterator_types: [indexed_field_count]type = undefined;
+                inline for (indexed_fields[0..indexed_field_count], 0..) |name, i| {
+                    const IndexType = @FieldType(Indexes, name);
+                    index_iterator_types[i] = IndexType.Iterator;
+                }
+                const TupleOfIndexIteratorTypes = std.meta.Tuple(&index_iterator_types);
 
-        //         const Id = @typeInfo(@FieldType(IndexKey, "record_id")).@"enum".tag_type;
+                //Populate the tuple with the actual iterators for each index
+                var index_iterators: TupleOfIndexIteratorTypes = undefined;
+                inline for (indexed_fields[0..indexed_field_count], 0..indexed_field_count) |name, i| {
+                    const index = @field(self.indexes, name);
+                    const IndexKey = @FieldType(Indexes, name).Key;
 
-        //         const max_id: Id = std.math.maxInt(Id);
+                    const query_value = @field(query, name);
+                    const IdInt = @typeInfo(@FieldType(IndexKey, "record_id")).@"enum".tag_type;
 
-        //         var buf_ids: [buf_len]IndexKey = undefined;
+                    const min_id: IdInt = 0;
+                    const max_id: IdInt = std.math.maxInt(IdInt);
 
-        //         const initial_match = index.filter(.{ .field_value = field_value, .record_id = @enumFromInt(0) }, .{ .field_value = field_value, .record_id = @enumFromInt(max_id) }, &buf_ids);
+                    index_iterators[i] = index.rangeIterator(
+                        .{ .field_value = query_value, .record_id = @enumFromInt(min_id) },
+                        .{ .field_value = query_value, .record_id = @enumFromInt(max_id) },
+                    );
+                }
 
-        //         if (initial_match == 0) return null;
-        //         var count: usize = 0;
+                break :blk .{ index_iterators, non_indexed_fields[0..non_indexed_count].* };
+            };
 
-        //         for (buf_ids[0..initial_match]) |idx_keys| {
-        //             const record = self.store.search(idx_keys.record_id) orelse @panic("This shouldn't happen");
+            var count: usize = 0;
 
-        //             const match = blk: {
-        //                 inline for (query_fields) |f| {
-        //                     comptime if (std.mem.eql(u8, f.name, index_field_name)) continue;
-        //                     const query_value = @field(query, f.name);
-        //                     const record_value = @field(record, f.name);
-        //                     const comp = compare_values(record_value, query_value);
+            //Now the intersection between the different iterators
+            //Thank you, Matklad. https://matklad.github.io/2025/03/19/comptime-zig-orm.html#Merge-Sort-Join
+            loop: while (true) {
+                //Check if we've filled the output buffer
+                if (count == buf.len) break;
 
-        //                     if (comp != .eq) break :blk false;
-        //                 }
-        //                 break :blk true;
-        //             };
+                const pk = index_iterators[0].peek() orelse break;
+                var min = pk.record_id;
 
-        //             if (match and count < buf_len) {
-        //                 buf[count] = record;
-        //                 count += 1;
-        //             }
-        //         }
-        //         return buf[0..count];
-        //     }
-        //     //No index field to filter with
-        //     const records = self.store.kv_list.items(.value);
+                //Get the iterator with the lowest record_id
+                inline for (index_iterators) |iterator| {
+                    const peek = iterator.peek() orelse break;
 
-        //     var count: usize = 0;
-        //     for (records) |record| {
-        //         const matches = blk: {
-        //             inline for (query_fields) |f| {
-        //                 const query_value = @field(query, f.name);
-        //                 const record_value = @field(record, f.name);
-        //                 if (compare_values(record_value, query_value) != .eq) break :blk false;
-        //             }
-        //             break :blk true;
-        //         };
-        //         if (matches and count < buf.len) {
-        //             buf[count] = record;
-        //             count += 1;
-        //         }
-        //     }
-        //     if (count == 0) return null;
-        //     return buf[0..count];
-        // }
+                    if (compare_values(peek.record_id, min) == .lt) {
+                        min = peek.record_id;
+                    }
+                }
+
+                //Advance all the iterators which match the lowest record_id
+                var matched_count: u32 = 0;
+                inline for (&index_iterators) |*iterator| {
+                    //We just passed it in the previous loop. There's no way it can be null
+                    if (compare_values(iterator.peek().?.record_id, min) == .eq) {
+                        @constCast(iterator).advance();
+                        matched_count += 1;
+                    }
+                }
+
+                //If all the iterators were advanced, then this record is a match
+                if (matched_count == index_iterators.len) {
+                    const record = self.store.get(min) orelse std.debug.panic("Indexes are out of sync with the database storage for record with id:{}\n", .{min});
+
+                    inline for (non_indexed_fields) |field_name| {
+                        const query_value = @field(query, field_name);
+                        if (@field(record, field_name) != query_value) continue :loop;
+                    }
+                    buf[count] = record;
+                    count += 1;
+                }
+            }
+
+            if (buf.len == 0) return null else return buf[0..count];
+        }
 
         pub fn update(self: *Self, fields: Table) void {
             const old = self.store.get(fields.id) orelse {
@@ -225,6 +246,10 @@ fn crud_for_table(comptime Table: anytype, TableId: anytype, comptime IndexBlock
         ///Any modifications to the data here affects the items in the table. Take care to avoid corruption
         pub fn slice(self: *Self) []Table {
             return self.store.values.items;
+        }
+        pub fn delete(self: *Self, id: TableId) ?Table {
+            _ = self;
+            _ = id;
         }
 
         pub fn deinit(self: *Self, gpa: Allocator) void {

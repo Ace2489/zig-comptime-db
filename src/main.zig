@@ -88,10 +88,6 @@ pub fn main() !void {
         accounts.appendAssumeCapacity(account);
     }
 
-    for (db.account.slice()) |i| {
-        std.debug.print("{}\n", .{i});
-    }
-
     const transfer_count = 10;
 
     for (0..transfer_count) |_| {
@@ -112,38 +108,27 @@ pub fn main() !void {
         );
     }
 
-    std.debug.print("\n", .{});
-    for (db.account.slice()) |i| {
-        std.debug.print("{}\n", .{i});
+    var transfers_buffer: [10]Transfer = undefined;
+    const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer);
+    for (alice_transfers.?) |t| {
+        std.debug.print("\nalice: from={} to={} amount={}\n", .{
+            t.debit_account,
+            t.credit_account,
+            t.amount,
+        });
     }
 
-    // std.debug.print("\n", .{});
-    // for (db.transfer.slice()) |i| {
-    //     std.debug.print("{}\n", .{i});
-    // }
-
-    // var transfers_buffer: [10]Transfer = undefined;
-    // const alice_transfers = db.transfer.filter(.{ .debit_account = alice }, &transfers_buffer, transfers_buffer.len);
-    // for (alice_transfers.?) |t| {
-    //     std.debug.print("\nalice: from={} to={} amount={}\n", .{
-    //         t.debit_account,
-    //         t.credit_account,
-    //         t.amount,
-    //     });
-    // }
-    // std.debug.print("\n\n", .{});
-    // const alice_to_bob_transfers = db.transfer.filter(
-    //     .{ .debit_account = alice, .credit_account = bob },
-    //     &transfers_buffer,
-    //     transfers_buffer.len,
-    // );
-    // for (alice_to_bob_transfers.?) |t| {
-    //     std.debug.print("\nalice to bob: from={} to={} amount={}\n", .{
-    //         t.debit_account,
-    //         t.credit_account,
-    //         t.amount,
-    //     });
-    // }
+    const alice_to_bob_transfers = db.transfer.filter(
+        .{ .debit_account = alice, .credit_account = bob },
+        &transfers_buffer,
+    );
+    for (alice_to_bob_transfers.?) |t| {
+        std.debug.print("\nalice to bob: from={} to={} amount={}\n", .{
+            t.debit_account,
+            t.credit_account,
+            t.amount,
+        });
+    }
 }
 fn pareto_index(random: std.Random, count: usize) usize {
     assert(count > 0);

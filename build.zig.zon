@@ -9,8 +9,8 @@
 
     .dependencies = .{
         .llrb = .{
-            .url = "git+https://github.com/Ace2489/red-black-tree.zig#66bbdb941d0ac85ff65e0134ee59f2c1f67c9365",
-            .hash = "llrb-0.0.0-lLSJgyM7AQCnsF3EJL7TEMSrr_HkhdNvF0WbLrrw-svP",
+            .url = "git+https://github.com/Ace2489/red-black-tree.zig#afcff69ba56b41af7e2b673d37af459ef2fadec6",
+            .hash = "llrb-0.0.0-lLSJgwNJAQAZj0YErwq1Pk_xmhwAo28jZj58FxQ8NQ_n",
         },
     },
     .paths = .{
