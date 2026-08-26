@@ -14,6 +14,7 @@ ZigDb is a library you can import into Zig applications.
 * Allows field-level indexing for performance.
 
 ## Installation
+Requires Zig 0.14
 
 ```bash
 zig fetch --save git+https://github.com/Ace2489/zig-comptime-db
